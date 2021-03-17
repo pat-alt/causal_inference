@@ -1,0 +1,471 @@
+---
+title: "Problem Set 4"
+author: "Patrick Altmeyer"
+date: "`r format(Sys.Date(), '%d %B, %Y')`"
+output: 
+  bookdown::html_document2:
+    code_folding: show
+    toc: true
+    toc_float: true
+    number_sections: false
+bibliography: bib.bib
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+library(data.table)
+dt_card <- data.table(haven::read_dta("data/cardkruegerdata.dta"))
+dt_gmm <- data.table(haven::read_dta("data/gmmdatafangcavazza.dta"))
+dt_panel <- data.table(haven::read_dta("data/paneldatafangcavazza.dta"))
+helper_functions <- list.files("R")
+lapply(
+  helper_functions,
+  function(i) {
+    source(file = file.path("R",i))
+  }
+)
+```
+
+# Part 1: “Minimum Wages and Employment: a Case Study of the Fast Food Industry in
+the New Jersey and Pennsylvania”, by David Card and Alan Krueger, 1993
+
+In this paper, the authors evaluate the impact of a particular policy - increase in minimum wages - on Full-Time Equivalent Employment rates using a Differences-in-Differences strategy. Read the introduction and empirical strategy sessions to understand well the differences between the New Jersey and Pennsylvania states, and what the policy was about in details. Look at the class4.do file covered in class for more details on its practical estimation. The data you will need for the following exercises are on `cardkruegerdata.dta`.
+
+<hr>
+
+## 1.
+
+State which are the necessary assumptions for the DiD strategy. Interpret them in the context of the paper. Do you think there is any concern regarding its validity in this context?
+
+<hr>
+
+### TODO
+
+## 2. 
+
+Compute the average Full-Time Equivalent employment in NJ and PA stores before and after the policy change (occurred in April 1992). Use these estimates to compute the Differences in Differences estimator
+
+$$
+\begin{equation} 
+\begin{aligned}
+&& \hat{\beta}_{DD}&= \left( \mathbb{E} \left[ Y_{it} | D_i=1,t=1 \right] - \mathbb{E} \left[ Y_{it} | D_i=1,t=0 \right] \right) - \left( \mathbb{E} \left[ Y_{it} | D_i=0,t=1 \right] - \mathbb{E} \left[ Y_{it} | D_i=0,t=0 \right]  \right) \\
+\end{aligned}
+(\#eq:did)
+\end{equation}
+$$
+<hr>
+
+The table below presents the sample means by state and wave $t$:
+
+```{r}
+library(kableExtra)
+kable(
+  dt_card[,.(avg_fte = mean(fte,na.rm=T)),by=.(state,t)], 
+  col.names = c("State", "t", "Average FTE")
+)
+```
+
+The DiD can be computed as follows:
+
+```{r avg-did}
+did <- dt_card[
+  ,
+  .(avg_fte = mean(fte,na.rm=T)), # averages 
+  by=.(state,t) # by state and wave
+][ 
+  ,
+  .(diff=avg_fte[t==1]-avg_fte[t==0]), # differences in averages
+  by=state # by wave
+][ 
+  ,
+  diff[state==1]-diff[state==0] # Difference in differences
+]
+```
+
+The estimated DiD is $\hat\beta_{DD}=`r round(did,3)`$.
+
+## 3. 
+
+Write the corresponding regression model that will lead the same Differences in Differences estimator obtained above. Implement it in Stata. Make sure results are identical to what you have just obtained.
+
+<hr>
+
+The corresponding regression model is 
+
+$$
+\begin{aligned}
+&& Y_{it}&= \beta_0 + \beta_1 D_{it} + \beta_2 T_{it} + \beta_{DD} D_{it} T_{it} + U_{it} \\
+\end{aligned}
+$$
+
+where $T_{it}=1$ if individual $i$ is in treatment period $t$. As evident from the table below, the estimated coefficient on the interaction term is in fact equal to the value obtained above, though notably it is not statistically significant.
+
+```{r reg-did, message=FALSE, results='asis'}
+library(stargazer)
+stargazer(dt_card[,lm(fte ~ state*t)],header=FALSE,type = "html")
+```
+
+
+# Part 2: “Dynamic Inefficiencies in an Employment-Based Health Insurance System: Theory and Evidence”, by Hanming Fang and Alessandro Gavazza, American Eco- nomic Review, 2011
+
+In this paper, the authors empirically verify their model of misallocation of investment in health care due to frictions in the labour market. They use a panel data on health care expenditures together with longitudinal information on individuals’ job tenure to assess the effects of job turnover on lifetime investment in health and medical expenditures when retired. Read the text carefully to understand in details its context and the authors' empirical strategy to answer the questions below.
+
+## 4.
+
+Define $y_it$ as the medical outcome of individual $i$ at year $t$. Then consider the following static model
+
+$$
+\begin{equation} 
+\begin{aligned}
+&& y_{it}&= \beta_0 + \beta_T \log(\text{Job Tenure}_{it}) + \eta_i + v_{it} \\
+\end{aligned}
+(\#eq:static)
+\end{equation}
+$$
+where $\eta_i$ capture individual fixed characteristics that are unobserved. If you were to estimate this model with a classic OLS regression, which would be your concern regarding the relationship between $\text{Job Tenure}_{it}$ and $\eta_i$? In other words, which is (are) the assumption(s) you would need to make sure $\beta_T$ is consistent? Are you on a Fixed or Random Effects scenario?
+
+<hr>
+
+### TODO
+
+## 5.
+
+Let $y_{it}$ be ”Doctor Visits”. Using `paneldatafangcavazza.dta`, estimate the trivial OLS model above, but including a dummy for each $year$ − $region$ and the covariates the authors control for. You will be replicating the first column of Table 3 in the paper, so check which are those covariates there.
+
+<hr>
+
+Below I first generate the additional regressors and then run the regression with $year$-$region$ fixed effects. As evident from the table below, the coefficient estimates and standard errors match the ones in the @fang2011dynamic. 
+
+```{r ols, results='asis'}
+dep_var <- "md2"
+dt_panel[,age_sq:=age^2]
+dt_panel[,age_cu:=age^3]
+dt_panel[,inc_sq:=inc^2]
+indep_vars <- c(
+  "ltenu",
+  "age",
+  "age_sq",
+  "educyear",
+  "inc",
+  "male",
+  "marry",
+  "famsze31",
+  "union31",
+  "age_cu",
+  "inc_sq",
+  "ff250",
+  "ff50",
+  "ff10",
+  "wh",
+  "bl"
+)
+# fe_vars <- c("y_r")
+# mod_data <- na.omit(dt_panel[,.SD,.SDcols=c(dep_var, indep_vars, fe_vars)])
+# setnames(mod_data, dep_var, "y")
+# y <- mod_data$y
+# cols <- colnames(mod_data)[!colnames(mod_data) %in% c("y",fe_vars)]
+# X <- as.matrix(mod_data[,.SD,.SDcols=cols])
+# index <- as.matrix(mod_data[,.SD,.SDcols=fe_vars])
+# mod <- lsdv(X, y, index) # least-sqares dummy variables
+# omit_vars <- which(indep_vars=="age_cu"):(length(indep_vars)+length(unique(index)))
+# stargazer(mod, header = FALSE, type = "html", omit=omit_vars)
+```
+
+```{r}
+y_r_dummies <- dcast(
+  dt_panel[,.(.I, var = y_r)], ... ~ var, fun.aggregate = length
+) # one-hot encode
+setnames(y_r_dummies, colnames(y_r_dummies)[-1], sprintf("y_r_%s", colnames(y_r_dummies)[-1]))
+dt_panel[,I:=.I]
+setkey(dt_panel, I)
+setkey(y_r_dummies, I)
+dt_panel <- dt_panel[y_r_dummies]
+dt_panel[,I:=NULL]
+y_r_dummies[,I:=NULL]
+dummy_vars <- colnames(y_r_dummies)
+```
+
+```{r, results='asis'}
+mod_data <- na.omit(dt_panel[,.SD,.SDcols=c(dep_var, indep_vars, dummy_vars)])
+setnames(mod_data, dep_var, "y")
+mod <- lm(y ~ 0 + ., data=mod_data)
+mod_list <- list(
+  pooled = mod
+)
+omit_vars <- which(names(mod$coefficients)=="age_cu"):(length(mod$coefficients))
+stargazer(mod, header = FALSE, type = "html", omit=omit_vars)
+```
+
+## 6.
+
+In a Random Effects scenario, in which $\mathbb{E} \left[\text{Job Tenure}_{it} \eta_i  \right] = 0$, a simple OLS regression will be subject to an efficiency issue. The reason is that the unobserved error component, $u_{it} = \eta_i + v_{it}$, suffers from serial autocorrelation, i.e. $\mathbb{E}[u_{it}u_{is}] \ne 0, \forall t \ne s$.
+
+### a. 
+
+One way for such correlation is through the Feasible GLS estimator. Describe how this estimation is done and the necessary assumptions.
+
+<hr>
+
+### TODO
+
+### b.
+
+Using `paneldatafangcavazza.dta`, estimate such model. You will be replicating column 2 of Table 1 below. Make sure you use the same controls/dummies you used before. [Hint: recall to use the `xtreg ..., re r` command. Do not forget to set your data as panel, i.e. `xtset ...` as done in class.]
+
+<hr>
+
+### TO CHECK
+
+```{r}
+library(plm)
+fe_vars <- c("id") # individual fixed effects
+mod_data <- na.omit(dt_panel[,.SD,.SDcols=c(dep_var, indep_vars, fe_vars, dummy_vars)])
+setnames(mod_data, dep_var, "y")
+```
+
+```{r fgls-scratch, eval=FALSE}
+y <- mod_data$y
+cols <- colnames(mod_data)[!colnames(mod_data) %in% c("y",fe_vars)]
+X <- as.matrix(mod_data[,.SD,.SDcols=cols])
+index <- as.matrix(mod_data[,.SD,.SDcols=fe_vars])
+mod <- fgls(X,y,index)
+```
+
+
+```{r, eval=F, echo=TRUE}
+f <- formula(paste0("y ~ 0 +", paste0(c(indep_vars,dummy_vars), collapse = " + ")))
+mod <- plm(f, index="id", model="random", data = mod_data)
+saveRDS(mod, file="output/fgls.rds")
+```
+
+```{r fgls, results='asis'}
+mod <- readRDS("output/fgls.rds")
+mod_list[["random_effects"]] <- mod
+```
+
+## 7.
+
+Now suppose we assume that $E[\text{Job Tenure}_{it},\eta_i]\ne0$, i.e. a Fixed Effects scenario.
+
+### a. 
+
+Explain in words why, in the context of the paper, that must be the case. Is that consistent with
+what you answered in question 1?
+
+<hr>
+
+### TODO
+
+### b.
+
+One way of estimating a Fixed Effects model is the *First Difference* LS model. Describe how this estimation is done, the necessary assumptions, and estimate it with the dataset used so far. Make sure the results match with column 3 of Table 1 below.
+
+<hr>
+
+### TO FILL
+
+```{r fd, echo=TRUE, eval=FALSE}
+f <- formula(paste0("y ~ ", paste0(c(indep_vars,dummy_vars), collapse = " + ")))
+mod <- plm(f, index="id", model="fd", data = mod_data)
+saveRDS(mod, file="output/fd.rds")
+```
+
+```{r fd-scratch, results='asis', eval=FALSE}
+y <- mod_data$y
+cols <- colnames(mod_data)[!colnames(mod_data) %in% c("y",fe_vars)]
+X <- as.matrix(mod_data[,.SD,.SDcols=cols])
+index <- as.matrix(mod_data[,.SD,.SDcols=fe_vars])
+mod <- fd(X,y,index)
+```
+
+```{r}
+mod <- readRDS("output/fd.rds")
+mod_list[["first_diff"]] <- mod
+```
+
+## c.
+
+Analytically show why this estimator solves the unobervables’ problem of the estimates in question 5 and 6. That is, show that $E[\Delta x_{it}\Delta u_{it}]=0$ ($x_{it}=\text{Job Tenure}_{it}$).
+
+<hr>
+
+### TODO
+
+## d.
+
+Another way doing inference in the current context is through the Within Group Estimator. Describe which are the two ways of doing this estimation. Explain how they are done and the necessary assumptions. How do these assumptions differ from the ones from the First Difference LS model?
+
+<hr>
+
+### TODO
+
+## e.
+
+You will now use the `paneldatafangcavazza.dta` data for doing both types of the WG estimation. For doing so, aggregate the data at the region-year level, so now the units of observation are averages at a region, in a certain year. Use the collapse command as shown in class. Disregard the region-year dummy (`y_r`) variable used before. Make sure the results are identical between them and that they do match column 4 of Table 1 below.
+
+<hr>
+
+```{r wg}
+fe_vars <- c("year","region")
+mod_data <- na.omit(dt_panel[,.SD,.SDcols=c(dep_var, indep_vars, fe_vars)])
+setnames(mod_data, dep_var, "y")
+mod_data <- mod_data[,lapply(.SD,mean),by=fe_vars]
+```
+
+```{r, eval=FALSE}
+f <- formula(paste0("y ~ ", paste0(c(indep_vars), collapse = " + ")))
+mod <- plm(f, index = "region", data = mod_data, model = "within")
+```
+
+```{r wg-scratch, eval=FALSE}
+y <- mod_data$y
+cols <- colnames(mod_data)[!colnames(mod_data) %in% c("y", fe_vars)]
+X <- as.matrix(mod_data[,.SD,.SDcols=cols])
+index <- as.matrix(mod_data[,.SD,.SDcols="region"])
+mod <- lsdv(X,y,index)
+omit_vars <- which(names(mod$coefficients)=="age"):length(mod$coefficients)
+stargazer(mod, header = FALSE, type = "html", omit=omit_vars)
+```
+
+
+# 8.
+
+Now suppose that doctor visits have a persistent behaviour, i.e. individuals that go often to the doctor would go more in future periods. Let us forget for a moment about the $\text{Job Tenure}_{it}$ regressor. Then, we can re-write model (1) as
+
+$$
+\begin{equation} 
+\begin{aligned}
+&& y_{it} &= \alpha y_{it-1} + \eta_i + v_{it}, & |\alpha|<1 \\
+\end{aligned}
+(\#eq:dyn)
+\end{equation}
+$$
+
+where $\alpha$ is the persistence parameter, which tells us how past values of the dependent variable are associated
+with its present values. This is a Dynamic Panel framework.
+
+### a. 
+
+State which are the necessary assumptions for estimating the model \@ref(eq:dyn) above.
+
+<hr>
+
+We still need to assume
+
+- error components: $\mathbb{E} \left[  \eta_i \right]=\mathbb{E} \left[  v_{it} \right]=\mathbb{E} \left[  \eta_iv_{it} \right]=0$
+- serially uncorrelated errors: $\mathbb{E} \left[  v_{it}v_{is} \right]=0 \ \forall \ s \ne t$
+
+but we relax strict exogeneity. Instead we need to assume that the *predetermined initial condition* holds, namely: $ \mathbb{E} \left[ y_{i0}, v_{it}  \right]$ for $t=1,...T$.
+
+### b.  
+
+Why should $|α| < 1$?
+
+<hr>
+
+#### TO CHECK
+
+As $\alpha \rightarrow 1$ the relevance of the instrument decreases. 
+
+### c.
+
+We saw in class that, by construction, $ \mathbb{E} \left[ y_{it−1}\eta_i \right] \ne 0$. Does that make sense in the context of the paper? Comment it in a few words.
+
+<hr>
+
+#### TODO
+
+### d.
+
+We know that OLS and RE would be biased in this context. Suppose one tells you to estimate it with the First Difference LS model. Show that, in this case, estimates are also biased. [Hint: you are asked to show that $E[\Delta y_{it-1}\Delta u_{it}] \ne 0$.
+
+<hr>
+
+#### TODO
+
+Hausmann test?
+
+### e. 
+
+We also saw in class that Anderson and Hsiao propose an IV approach to estimate a model like \@ref(eq:dyn) in first differences. Arellano and Bond, instead, provide an alternative GMM approach (aka First Difference GMM). Describe this method in details. [Hint: answer it in words, without heavy algebra. The most important here is to make sure you understand it!]
+
+<hr>
+
+#### TODO
+
+### f. 
+
+Arellano and Bover (1995) improved the GMM method above to what is known as System GMM. Describe this method, emphasising the different assumptions from above. [Hint: the same hint.]
+
+### g.
+
+Use the data `gmmdatafangcavazza.dta` to replicate column 5 of Table 1 below (or 4 of Table 3 in the paper, aprox.). You must use the same specification (dependent variable, regressors) used in exercise 2, but adding the lag of the dependent variable as a regressor and the level and lags of the exogenous regressors.
+
+<hr>
+
+First I prepare the data below:
+
+```{r, echo=TRUE}
+fe_vars <- "id"
+instr <- c("emp_deaths", "est_deaths", "emp_death_rate", "est_death_rate")
+indep_vars <- c(
+  "ltenu",
+  "mage",
+  "mage2",
+  "medu",
+  "minc",
+  "male",
+  "married",
+  "famsze31",
+  "munio",
+  "mage3",
+  "minc2",
+  "f250",
+  "f50",
+  "f10",
+  "white",
+  "black"
+)
+mod_data <- dt_gmm[insample==1,.SD,.SDcols=c(dep_var, indep_vars, fe_vars)]
+setnames(mod_data, dep_var, "y")
+```
+
+
+```{r, eval=FALSE}
+f <- formula(
+  paste(
+    paste0(
+      "y ~ ",
+      "lag(y,1) + ", # 1 lag of dependent variable
+      # paste0(sprintf("lag(%s, 0:1)", indep_vars), collapse = " + ") # regressors
+      paste0(indep_vars, collapse = " + ") # regressors
+    ),
+    paste0(
+      "lag(y,2:6) + ",
+      paste0(sprintf("lag(%s, 2:6)", indep_vars), collapse = " + ") # regressors
+    ),
+    sep=" | "
+  )
+)
+mod <- pgmm(
+  f, 
+  data = mod_data, 
+  effect = "twoways", 
+  model = "onestep", 
+  transformation = "ld",
+  index = fe_vars
+)
+```
+
+
+#### TODO
+
+# Annex
+
+```{r, results='asis'}
+stargazer(mod_list, type="html", header = FALSE, keep = indep_vars, digits=4)
+```
+
+
+# References
